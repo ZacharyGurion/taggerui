@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"math"
+	//"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 	
@@ -40,11 +41,16 @@ var show = []tag{
 	{name: "DiscNumber", width: 0.20, enabled: false, taglibName: taglib.DiscNumber},
 }
 
+type browseScene struct {
+	table table.Model
+	tags[][]string
+}
+
 type model struct {
-	table			table.Model
-	height			int
-	width			int
-	tags			[][]string
+	height int
+	width int
+	current int
+	browse browseScene
 }
 
 func isAudioFile(filePath string) (bool, error) {
@@ -83,7 +89,7 @@ func scanFiles(dir string) ([]string) {
 	for _, v := range dirFiles {
 		isAudio, err := isAudioFile(v)
 		if err != nil {
-			fmt.Println("Error:", err)
+			//fmt.Println("Error:", err)
 		}
 		if isAudio {
 			fileNames = append(fileNames, v)
@@ -94,6 +100,7 @@ func scanFiles(dir string) ([]string) {
 
 func initialModel() model {
 	m := model{
+		current: 0,
 	}
 	return m
 }
@@ -146,7 +153,7 @@ func setTable(m model) model{
 		Background(lipgloss.Color("57")).
 		Bold(false)
 	t.SetStyles(s)
-	m.table = t
+	m.browse.table = t
 
 	return m
 }
@@ -156,45 +163,40 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-
 	var cmd tea.Cmd
-
     switch msg := msg.(type) {
-	
 	case tea.WindowSizeMsg:
 		tea.ClearScreen()
 		m.width = msg.Width
-		m.height = msg.Height
+		m.height = min(msg.Height, len(m.browse.table.Rows()) + 7)
 		fmt.Print("\033[H\033[2J")
-
-		m = setTable(m)
-		
+		m.browse = setTable(m).browse
     case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
-			if m.table.Focused() {
-				m.table.Blur()
+			if m.browse.table.Focused() {
+				m.browse.table.Blur()
 			} else {
-				m.table.Focus()
+				m.browse.table.Focus()
 			}
 		case "q", "ctrl+c":
 			fmt.Print("\033[H\033[2J")
 			return m, tea.Quit
 		case "enter":
-			tagsOut, _ := taglib.ReadTags(songFiles[m.table.Cursor()])
+			//tagsOut, _ := taglib.ReadTags(songFiles[m.browse.table.Cursor()])
 			return m, tea.Batch(
-				tea.Printf("Edit song: %s", tagsOut[taglib.Title]),
+				//tea.Printf("Edit song: %s", tagsOut[taglib.Title]),
 			)
 		}
     }
 
-	m.table, cmd = m.table.Update(msg)
+	m.browse.table, cmd = m.browse.table.Update(msg)
 
     return m, cmd
 }
 
 func (m model) View() string {
-	if (m.width < 20 || m.height < 8) {
+	if (m.width < 20 || m.height < len(m.browse.table.Rows()) + 4) {
 		tea.ClearScreen()
 		return "Window too small"
 	}
@@ -202,7 +204,7 @@ func (m model) View() string {
 	//s += "Songs in directory: \n"
 
     // The footer
-	s += baseStyle.Render(m.table.View())
+	s += baseStyle.Render(m.browse.table.View())
     //s += "\nPress q to quit.\n"
     // Send the UI for rendering
     return s
